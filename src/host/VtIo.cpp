@@ -152,6 +152,7 @@ bool VtIo::IsUsingVt() const
     // send us full INPUT_RECORDs as input. If the terminal doesn't understand
     // this sequence, it'll just ignore it.
     //LOG_IF_FAILED(_pVtRenderEngine->RequestWin32Input());
+    Write("\x1b[20h\033[?9001h\033[?1004h");
 
     if (_pVtInputThread)
     {
@@ -248,24 +249,6 @@ void VtIo::SetWindowVisibility(bool /*showOrHide*/) noexcept
     return S_OK;
 }
 
-// Method Description:
-// - Attempts to set the initial cursor position, if we're looking for it.
-//      If we're not trying to inherit the cursor, does nothing.
-// Arguments:
-// - coordCursor: The initial position of the cursor.
-// Return Value:
-// - S_OK if we successfully inherited the cursor or did nothing, else an
-//      appropriate HRESULT
-[[nodiscard]] HRESULT VtIo::SetCursorPosition(const til::point /*coordCursor*/)
-{
-    auto hr = S_OK;
-    if (_lookingForCursorPosition)
-    {
-        _lookingForCursorPosition = false;
-    }
-    return hr;
-}
-
 void VtIo::CloseInput()
 {
     _pVtInputThread = nullptr;
@@ -306,23 +289,22 @@ void VtIo::SendCloseEvent()
     return S_OK;
 }
 
-[[nodiscard]] HRESULT VtIo::RequestMouseMode(bool /*enable*/) const noexcept
-{
-    return S_OK;
-}
-
-void VtIo::Write(const std::wstring_view& str)
+void VtIo::Write(const std::string_view& str)
 {
     if (str.empty() || !_hOutput)
     {
         return;
     }
 
-    const auto u8 = til::u16u8(str);
-    const auto fSuccess = WriteFile(_hOutput.get(), u8.data(), gsl::narrow_cast<DWORD>(u8.size()), nullptr, nullptr);
+    const auto fSuccess = WriteFile(_hOutput.get(), str.data(), gsl::narrow_cast<DWORD>(str.size()), nullptr, nullptr);
     if (!fSuccess)
     {
         LOG_LAST_ERROR();
         CloseOutput();
     }
+}
+
+void VtIo::Write(const std::wstring_view& str)
+{
+    Write(til::u16u8(str));
 }

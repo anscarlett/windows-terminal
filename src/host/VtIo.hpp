@@ -24,18 +24,17 @@ namespace Microsoft::Console::VirtualTerminal
 
         [[nodiscard]] HRESULT StartIfNeeded();
 
-        [[nodiscard]] HRESULT SetCursorPosition(const til::point coordCursor);
         void SendCloseEvent();
 
         void CloseInput();
         void CloseOutput();
 
         [[nodiscard]] HRESULT ManuallyClearScrollback() const noexcept;
-        [[nodiscard]] HRESULT RequestMouseMode(bool enable) const noexcept;
 
         void CreatePseudoWindow();
         void SetWindowVisibility(bool showOrHide) noexcept;
-
+        
+        void Write(const std::string_view& str);
         void Write(const std::wstring_view& str);
 
     private:

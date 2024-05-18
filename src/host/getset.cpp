@@ -369,16 +369,34 @@ void ApiRoutines::GetNumberOfConsoleMouseButtonsImpl(ULONG& buttons) noexcept
 
         if (gci.IsInVtIoMode())
         {
+            auto oldMode = context.InputMode;
+            auto newMode = mode;
+
             // Mouse input should be received when mouse mode is on and quick edit mode is off
             // (for more information regarding the quirks of mouse mode and why/how it relates
             //  to quick edit mode, see GH#9970)
             const auto newQuickEditMode{ WI_IsFlagSet(gci.Flags, CONSOLE_QUICK_EDIT_MODE) };
-            const auto oldMouseMode{ !oldQuickEditMode && WI_IsFlagSet(context.InputMode, ENABLE_MOUSE_INPUT) };
-            const auto newMouseMode{ !newQuickEditMode && WI_IsFlagSet(mode, ENABLE_MOUSE_INPUT) };
+            WI_ClearFlagIf(oldMode, ENABLE_MOUSE_INPUT, oldQuickEditMode);
+            WI_ClearFlagIf(newMode, ENABLE_MOUSE_INPUT, newQuickEditMode);
 
-            if (oldMouseMode != newMouseMode)
+            const auto diff = oldMode ^ newMode;
+            std::string buf;
+
+            if (WI_IsFlagSet(diff, DISABLE_NEWLINE_AUTO_RETURN))
             {
-                LOG_IF_FAILED(gci.GetVtIo()->RequestMouseMode(newMouseMode));
+                buf.append("\x1b[20");
+                buf.push_back(WI_IsFlagClear(mode, DISABLE_NEWLINE_AUTO_RETURN) ? 'h' : 'l');
+            }
+
+            if (WI_IsFlagSet(diff, ENABLE_MOUSE_INPUT))
+            {
+                buf.append("\x1b[?1003;1006");
+                buf.push_back(WI_IsFlagSet(mode, ENABLE_MOUSE_INPUT) ? 'h' : 'l');
+            }
+
+            if (!buf.empty())
+            {
+                gci.GetVtIo()->Write(buf);
             }
         }
 
@@ -713,7 +731,10 @@ void ApiRoutines::GetLargestConsoleWindowSizeImpl(const SCREEN_INFORMATION& cont
 
         // MSFT: 15813316 - Try to use this SetCursorPosition call to inherit the cursor position.
         auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
-        RETURN_IF_FAILED(gci.GetVtIo()->SetCursorPosition(position));
+        if (gci.IsInVtIoMode())
+        {
+            gci.GetVtIo()->Write(fmt::format(FMT_COMPILE("\x1b[{};{}H"), position.y + 1, position.x + 1));
+        }
 
         RETURN_IF_NTSTATUS_FAILED(buffer.SetCursorPosition(position, true));
 
