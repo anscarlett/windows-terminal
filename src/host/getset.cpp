@@ -854,14 +854,7 @@ void ApiRoutines::GetLargestConsoleWindowSizeImpl(const SCREEN_INFORMATION& cont
             context.PostUpdateWindowSize();
 
             // Use WriteToScreen to invalidate the viewport with the renderer.
-            // GH#3490 - If we're in conpty mode, don't invalidate the entire
-            // viewport. In conpty mode, the VtEngine will later decide what
-            // part of the buffer actually needs to be re-sent to the terminal.
-            if (!(g.getConsoleInformation().IsInVtIoMode() &&
-                  g.getConsoleInformation().GetVtIo()->IsResizeQuirkEnabled()))
-            {
-                WriteToScreen(context, context.GetViewport());
-            }
+            WriteToScreen(context, context.GetViewport());
         }
         return S_OK;
     }
@@ -954,7 +947,6 @@ void ApiRoutines::GetLargestConsoleWindowSizeImpl(const SCREEN_INFORMATION& cont
             {
                 // It's important that we flush the renderer at this point so we don't
                 // have any pending output rendered after the scrollback is cleared.
-                ServiceLocator::LocateGlobals().pRender->TriggerFlush(false);
                 hr = gci.GetVtIo()->ManuallyClearScrollback();
             }
         }

@@ -277,7 +277,7 @@ void WriteCharsLegacy(SCREEN_INFORMATION& screenInfo, const std::wstring_view& t
                                       std::unique_ptr<WriteData>& waiter)
 try
 {
-    const auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
+    auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
     if (WI_IsAnyFlagSet(gci.Flags, (CONSOLE_SUSPENDED | CONSOLE_SELECTING | CONSOLE_SCROLLBAR_TRACKING)))
     {
         waiter = std::make_unique<WriteData>(screenInfo,
@@ -288,24 +288,15 @@ try
         return CONSOLE_STATUS_WAIT;
     }
 
-    const auto vtIo = ServiceLocator::LocateGlobals().getConsoleInformation().GetVtIo();
     const auto restoreVtQuirk = wil::scope_exit([&]() {
         if (requiresVtQuirk)
         {
             screenInfo.ResetIgnoreLegacyEquivalentVTAttributes();
         }
-        if (vtIo->IsUsingVt())
-        {
-            vtIo->CorkRenderer(false);
-        }
     });
     if (requiresVtQuirk)
     {
         screenInfo.SetIgnoreLegacyEquivalentVTAttributes();
-    }
-    if (vtIo->IsUsingVt())
-    {
-        vtIo->CorkRenderer(true);
     }
 
     const std::wstring_view str{ pwchBuffer, *pcbBuffer / sizeof(WCHAR) };
@@ -317,6 +308,11 @@ try
     else
     {
         screenInfo.GetStateMachine().ProcessString(str);
+
+        if (gci.IsInVtIoMode())
+        {
+            gci.GetVtIo()->Write(str);
+        }
     }
 
     return STATUS_SUCCESS;
