@@ -88,11 +88,9 @@ VtIo::VtIo() :
     {
         return S_FALSE;
     }
-    auto& globals = ServiceLocator::LocateGlobals();
 
-    const auto& gci = globals.getConsoleInformation();
     // SetWindowVisibility uses the console lock to protect access to _pVtRenderEngine.
-    assert(gci.IsConsoleLocked());
+    assert(ServiceLocator::LocateGlobals().getConsoleInformation().IsConsoleLocked());
 
     try
     {
