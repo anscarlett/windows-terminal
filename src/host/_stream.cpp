@@ -311,7 +311,7 @@ try
 
         if (gci.IsInVtIoMode())
         {
-            gci.GetVtIo()->Write(str);
+            gci.GetVtIo()->WriteUTF16(str);
         }
     }
 

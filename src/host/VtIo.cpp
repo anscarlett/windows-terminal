@@ -8,7 +8,6 @@
 #include "../renderer/base/renderer.hpp"
 #include "../types/inc/utils.hpp"
 #include "handle.h" // LockConsole
-#include "input.h" // ProcessCtrlEvents
 #include "output.h" // CloseConsoleProcessState
 
 using namespace Microsoft::Console;
@@ -18,10 +17,14 @@ using namespace Microsoft::Console::Types;
 using namespace Microsoft::Console::Utils;
 using namespace Microsoft::Console::Interactivity;
 
-VtIo::VtIo() :
-    _initialized(false),
-    _lookingForCursorPosition(false)
+VtIo::CorkLock::CorkLock(VtIo& io) noexcept :
+    _io{ io }
 {
+}
+
+VtIo::CorkLock::~CorkLock() noexcept
+{
+    _io._uncork();
 }
 
 [[nodiscard]] HRESULT VtIo::Initialize(const ConsoleArguments* const pArgs)
@@ -70,6 +73,21 @@ VtIo::VtIo() :
     // If the args say so, then at least one of in, out, or signal was specified
     _initialized = true;
     return S_OK;
+}
+
+void VtIo::_uncork()
+{
+    _corked -= 1;
+    _flush();
+}
+
+void VtIo::_flush()
+{
+    if (_corked == 0)
+    {
+        WriteUTF8(_buffer);
+        _buffer.clear();
+    }
 }
 
 // Method Description:
@@ -150,7 +168,7 @@ bool VtIo::IsUsingVt() const
     // send us full INPUT_RECORDs as input. If the terminal doesn't understand
     // this sequence, it'll just ignore it.
     //LOG_IF_FAILED(_pVtRenderEngine->RequestWin32Input());
-    Write("\x1b[20h\033[?9001h\033[?1004h");
+    WriteUTF8("\x1b[20h\033[?9001h\033[?1004h");
 
     if (_pVtInputThread)
     {
@@ -287,10 +305,22 @@ void VtIo::SendCloseEvent()
     return S_OK;
 }
 
-void VtIo::Write(const std::string_view& str)
+VtIo::CorkLock VtIo::Cork() noexcept
+{
+    _corked += 1;
+    return CorkLock{ *this };
+}
+
+void VtIo::WriteUTF8(const std::string_view& str)
 {
     if (str.empty() || !_hOutput)
     {
+        return;
+    }
+
+    if (_corked > 0)
+    {
+        _buffer.append(str);
         return;
     }
 
@@ -302,7 +332,13 @@ void VtIo::Write(const std::string_view& str)
     }
 }
 
-void VtIo::Write(const std::wstring_view& str)
+void VtIo::WriteUTF16(const std::wstring_view& str)
 {
-    Write(til::u16u8(str));
+    if (str.empty() || !_hOutput)
+    {
+        return;
+    }
+
+    const auto str8 = til::u16u8(str);
+    WriteUTF8(str8);
 }
