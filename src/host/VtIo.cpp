@@ -17,14 +17,32 @@ using namespace Microsoft::Console::Types;
 using namespace Microsoft::Console::Utils;
 using namespace Microsoft::Console::Interactivity;
 
-VtIo::CorkLock::CorkLock(VtIo& io) noexcept :
+VtIo::CorkLock::CorkLock(VtIo* io) noexcept :
     _io{ io }
 {
 }
 
 VtIo::CorkLock::~CorkLock() noexcept
 {
-    _io._uncork();
+    if (_io)
+    {
+        _io->_uncork();
+    }
+}
+
+VtIo::CorkLock::CorkLock(CorkLock&& other) :
+    _io{ std::exchange(other._io, nullptr) }
+{
+}
+
+VtIo::CorkLock& VtIo::CorkLock::operator=(CorkLock&& other)
+{
+    if (this != &other)
+    {
+        this->~CorkLock();
+        _io = std::exchange(other._io, nullptr);
+    }
+    return *this;
 }
 
 [[nodiscard]] HRESULT VtIo::Initialize(const ConsoleArguments* const pArgs)
@@ -212,23 +230,6 @@ void VtIo::CreatePseudoWindow()
     }
 }
 
-void VtIo::SetWindowVisibility(bool /*showOrHide*/) noexcept
-{
-    auto& gci = ::Microsoft::Console::Interactivity::ServiceLocator::LocateGlobals().getConsoleInformation();
-
-    gci.LockConsole();
-    auto unlock = wil::scope_exit([&] { gci.UnlockConsole(); });
-
-    // ConsoleInputThreadProcWin32 calls VtIo::CreatePseudoWindow,
-    // which calls CreateWindowExW, which causes a WM_SIZE message.
-    // In short, this function might be called before _pVtRenderEngine exists.
-    // See PtySignalInputThread::CreatePseudoWindow().
-    //if (_pVtRenderEngine)
-    //{
-    //    LOG_IF_FAILED(_pVtRenderEngine->SetWindowVisibility(showOrHide));
-    //}
-}
-
 // Method Description:
 // - Create and start the signal thread. The signal thread can be created
 //      independent of the i/o threads, and doesn't require a client first
@@ -290,25 +291,10 @@ void VtIo::SendCloseEvent()
     }
 }
 
-// Method Description:
-// - Manually tell the renderer that it should emit a "Erase Scrollback"
-//   sequence to the connected terminal. We need to do this in certain cases
-//   that we've identified where we believe the client wanted the entire
-//   terminal buffer cleared, not just the viewport. For more information, see
-//   GH#3126.
-// Arguments:
-// - <none>
-// Return Value:
-// - S_OK if we wrote the sequences successfully, otherwise an appropriate HRESULT
-[[nodiscard]] HRESULT VtIo::ManuallyClearScrollback() const noexcept
-{
-    return S_OK;
-}
-
 VtIo::CorkLock VtIo::Cork() noexcept
 {
     _corked += 1;
-    return CorkLock{ *this };
+    return CorkLock{ this };
 }
 
 void VtIo::WriteUTF8(const std::string_view& str)

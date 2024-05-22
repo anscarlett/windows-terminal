@@ -808,6 +808,14 @@ void ApiRoutines::GetLargestConsoleWindowSizeImpl(const SCREEN_INFORMATION& cont
 
         context.SetCursorInformation(size, isVisible);
 
+        auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
+        if (gci.IsInVtIoMode())
+        {
+            char buf[] = "\x1b[?25l";
+            buf[std::size(buf) - 2] = isVisible ? 'h' : 'l';
+            gci.GetVtIo()->WriteUTF8(buf);
+        }
+
         return S_OK;
     }
     CATCH_RETURN();
@@ -951,22 +959,15 @@ void ApiRoutines::GetLargestConsoleWindowSizeImpl(const SCREEN_INFORMATION& cont
         auto& gci = ServiceLocator::LocateGlobals().getConsoleInformation();
         if (enableCmdShim && gci.IsInVtIoMode())
         {
-            const auto currentBufferDimensions = buffer.GetBufferSize().Dimensions();
-            const auto sourceIsWholeBuffer = (source.top == 0) &&
-                                             (source.left == 0) &&
-                                             (source.right == currentBufferDimensions.width) &&
-                                             (source.bottom == currentBufferDimensions.height);
-            const auto targetIsNegativeBufferHeight = (target.x == 0) &&
-                                                      (target.y == -currentBufferDimensions.height);
-            const auto noClipProvided = clip == std::nullopt;
-            const auto fillIsBlank = (fillCharacter == UNICODE_SPACE) &&
-                                     (fillAttribute == buffer.GetAttributes().GetLegacyAttributes());
+            const auto size = buffer.GetBufferSize().ToInclusive();
+            const auto sourceIsWholeBuffer = source == size;
+            const auto targetIsNegativeBufferHeight = target.x == 0 && target.y == -size.bottom;
+            const auto noClipProvided = !clip;
+            const auto fillIsBlank = fillCharacter == UNICODE_SPACE && fillAttribute == buffer.GetAttributes().GetLegacyAttributes();
 
             if (sourceIsWholeBuffer && targetIsNegativeBufferHeight && noClipProvided && fillIsBlank)
             {
-                // It's important that we flush the renderer at this point so we don't
-                // have any pending output rendered after the scrollback is cleared.
-                hr = gci.GetVtIo()->ManuallyClearScrollback();
+                gci.GetVtIo()->WriteUTF8("\x1b[3J");
             }
         }
 

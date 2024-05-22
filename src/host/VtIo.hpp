@@ -15,11 +15,18 @@ namespace Microsoft::Console::VirtualTerminal
     public:
         struct CorkLock
         {
-            CorkLock(VtIo& io) noexcept;
+            CorkLock() = default;
+            CorkLock(VtIo* io) noexcept;
+
             ~CorkLock() noexcept;
 
+            CorkLock(const CorkLock&) = delete;
+            CorkLock& operator=(const CorkLock&) = delete;
+            CorkLock(CorkLock&& other);
+            CorkLock& operator=(CorkLock&& other);
+
         private:
-            VtIo& _io;
+            VtIo* _io = nullptr;
         };
 
         friend struct CorkLock;
@@ -38,10 +45,7 @@ namespace Microsoft::Console::VirtualTerminal
         void CloseInput();
         void CloseOutput();
 
-        [[nodiscard]] HRESULT ManuallyClearScrollback() const noexcept;
-
         void CreatePseudoWindow();
-        void SetWindowVisibility(bool showOrHide) noexcept;
 
         CorkLock Cork() noexcept;
         void WriteFormat(auto&&... args)
