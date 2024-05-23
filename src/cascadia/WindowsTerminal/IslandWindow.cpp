@@ -1798,9 +1798,12 @@ til::rect IslandWindow::_getQuakeModeSize(HMONITOR hmon)
         ::base::ClampSub(nearestMonitorInfo.rcWork.left, (ncSize.width / 2)) + 1,
         (nearestMonitorInfo.rcWork.top)
     };
+
+    // modified this section to allow quake mode to take up the whole screen.
+    // not sure yet what the - 2 is on the width, so it's included in the height for testing.
     const til::size dimensions{
         availableSpace.width - 2,
-        availableSpace.height / 2
+        availableSpace.height - 2
     };
 
     return { origin, dimensions };
